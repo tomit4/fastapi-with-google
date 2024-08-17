@@ -1,0 +1,7 @@
+HOST="127.0.0.1""
+PORT=5173
+GOOGLE_CLIENT_ID=""
+GOOGLE_CLIENT_SECRET=""
+GOOGLE_REDIRECT_URI=""
+# NOTE: Must be generated properly: use `openssl rand -hex 32`
+SECRET_KEY=""
