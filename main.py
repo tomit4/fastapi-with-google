@@ -53,7 +53,7 @@ app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
 
 # TODO: Needs a refactor, already too long of a function
 @app.get("/")
-async def public(request: Request):
+async def public(request: Request) -> Response:
     user = request.session.get("user")
     access_token = request.cookies.get("access_token")
     refresh_token = request.cookies.get("refresh_token")
