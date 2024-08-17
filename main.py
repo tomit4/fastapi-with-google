@@ -1,4 +1,5 @@
 import os
+from typing import Any
 
 import httpx
 import uvicorn
@@ -51,6 +52,51 @@ if SECRET_KEY is None:
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
 
 
+# Helper functions for use with google oauth api
+async def get_user_info(access_token: str) -> dict[str, Any] | None:
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            "https://www.googleapis.com/oauth2/v1/userinfo",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        if response.status_code == 200:
+            return response.json()
+        return None
+
+
+async def refresh_access_token(refresh_token: str) -> dict[str, Any] | None:
+    token_url = "https://oauth2.googleapis.com/token"
+    payload = {
+        "client_id": GOOGLE_CLIENT_ID,
+        "client_secret": GOOGLE_CLIENT_SECRET,
+        "refresh_token": refresh_token,
+        "grant_type": "refresh_token",
+    }
+    async with httpx.AsyncClient() as client:
+        token_response = await client.post(token_url, data=payload)
+        if token_response.status_code == 200:
+            return token_response.json()
+    return None
+
+
+# Simple helper function that sets the access token and refresh token as secure cookies
+def set_cookie_tokens(response: Response, access_token, refresh_token=None) -> Response:
+    response.set_cookie(
+        "access_token",
+        access_token,
+        httponly=True,
+        secure=True,
+    )
+    if refresh_token:
+        response.set_cookie(
+            "refresh_token",
+            refresh_token,
+            httponly=True,
+            secure=True,
+        )
+    return response
+
+
 # TODO: Needs a refactor, already too long of a function
 @app.get("/")
 async def public(request: Request) -> Response:
@@ -59,51 +105,17 @@ async def public(request: Request) -> Response:
     refresh_token = request.cookies.get("refresh_token")
 
     if access_token:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                "https://www.googleapis.com/oauth2/v1/userinfo",
-                headers={"Authorization": f"Bearer {access_token}"},
-            )
-            if response.status_code == 200:
-                user_info = response.json()
-                name = user_info.get("name")
-                return HTMLResponse(f"<p>Hello {name}!</p><a href=/logout>Logout</a>")
-            elif response.status_code == 401:  # Token is no longer valid
-                if refresh_token:
-                    # Try to refresh the access token using the refresh token
-                    token_url = "https://oauth2.googleapis.com/token"
-                    payload = {
-                        "client_id": GOOGLE_CLIENT_ID,
-                        "client_secret": GOOGLE_CLIENT_SECRET,
-                        "refresh_token": refresh_token,
-                        "grant_type": "refresh_token",
-                    }
-
-                    async with client.post(token_url, data=payload) as token_response:
-                        if token_response.status_code == 200:
-                            new_token = token_response.json()
-                            new_access_token = new_token.get("access_token")
-                            new_refresh_token = new_token.get("refresh_token")
-
-                            # Set new tokens as cookies
-                            response = RedirectResponse(url="/")
-                            response.set_cookie(
-                                "access_token",
-                                new_access_token,
-                                httponly=True,
-                                secure=True,
-                            )
-
-                            # Update refresh token if returned
-                            if new_refresh_token:
-                                response.set_cookie(
-                                    "refresh_token",
-                                    new_refresh_token,
-                                    httponly=True,
-                                    secure=True,
-                                )
-
-                            return response
+        user = await get_user_info(access_token)
+        if user:
+            request.session["user"] = user
+    elif user is None and refresh_token:
+        new_token = await refresh_access_token(refresh_token)
+        if new_token:
+            new_access_token = new_token.get("access_token")
+            if new_access_token:
+                response = RedirectResponse(url="/")
+                response = set_cookie_tokens(response, new_access_token)
+                return response
     if user:
         name = user.get("name")
         return HTMLResponse(f"<p>Hello {name}!</p><a href=/logout>Logout</a>")
@@ -118,21 +130,13 @@ async def login(request: Request) -> Response:
 
 
 @app.route("/auth")
-async def auth(request: Request) -> None | RedirectResponse:
+async def auth(request: Request) -> Response:
     try:
         token = await oauth.google.authorize_access_token(request)  # type:ignore
-        user = token.get("userinfo")
         access_token = token.get("access_token")
         refresh_token = token.get("refresh_token")
-        if user:
-            request.session["user"] = user
         response = RedirectResponse(url="/")
-        response.set_cookie(
-            key="access_token", value=access_token, httponly=True, secure=True
-        )
-        response.set_cookie(
-            key="refresh_token", value=refresh_token, httponly=True, secure=True
-        )
+        response = set_cookie_tokens(response, access_token, refresh_token)
         return response
     except OAuthError as e:
         print("OAuthError :=>", e)
