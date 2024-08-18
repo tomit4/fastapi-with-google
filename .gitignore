@@ -1,4 +1,16 @@
-*.vim
+# python generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# venv
+.venv
+
+# project environment variables
 *.env
-.venv/
-__pycache__
+
+# editor
+*.vim

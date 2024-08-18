@@ -154,5 +154,5 @@ async def logout(request: Request) -> RedirectResponse:
     return response
 
 
-if __name__ == "__main__":
+def main():
     uvicorn.run(app, host=HOST, port=PORT)
