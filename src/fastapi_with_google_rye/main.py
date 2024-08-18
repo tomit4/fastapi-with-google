@@ -2,9 +2,10 @@ import os
 from typing import Any
 
 import httpx
-import uvicorn
-from authlib.integrations.starlette_client import OAuth, OAuthError
-from authlib.integrations.starlette_client.apps import RedirectResponse
+import uvicorn  # type:ignore
+from authlib.integrations.starlette_client import OAuth  # type:ignore
+from authlib.integrations.starlette_client import OAuthError  # type:ignore
+from authlib.integrations.starlette_client.apps import RedirectResponse  # type:ignore
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import HTMLResponse
